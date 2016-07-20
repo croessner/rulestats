@@ -1,0 +1,161 @@
+Intro:
+------
+
+These scripts are little helpers for logrotate to produce reports. Each report
+prints out all spam rules that have been in use by spamassassin and rspamd. The
+reports are devided into ham and spam sections, each sorted by score (you can
+change this in the scripts header).
+
+There are some requirements that must be done before these scripts work. First
+of all, amavisd-new must use a special log template and second rspamd must log
+to syslog (I did not test a regular file. Maybe it does not have this
+requirement).
+
+For both, a working regular expression pattern has been defined in the scripts
+headers. If the scripts do not generate the reports, then you might need to
+tweak the matching rules.
+
+
+logrotate:
+----------
+
+My logrotate script looks something like this:
+
+/var/log/mail.log
+{
+        rotate 14
+        daily
+        missingok
+        notifempty
+        compress
+        compresscmd /usr/bin/pbzip2
+        compressoptions -9
+        compressext .bz2
+        dateext
+        delaycompress
+        sharedscripts
+        postrotate
+                DATE=$(date +"%Y%m%d")
+
+                /usr/local/sbin/create-spamassassin-report.py \
+                        < /var/log/mail.log-${DATE} | \
+                        mail -s "Report: spamassassin" root
+
+                /usr/bin/rspamadm configdump -j | \
+                        /usr/local/sbin/create-rspamd-report.py \
+                                /var/log/mail.log-${DATE} | \
+                        mail -s "Report: rspamd" root
+
+                kill -HUP $(cat /run/rsyslogd.pid) &>/dev/null || true
+        endscript
+}
+
+This usage guarentees that you will get a full 24 hour report. I have placed the
+two scripts under /usr/local/sbin. If you prefer another place, you must adpot
+the paths in the logrotate snippet.
+
+
+General requirements:
+---------------------
+
+A python 2.x interpreter. Maybe python 3 does also work, but I did not try it
+yet.
+
+
+Requirements for amavisd-new:
+-----------------------------
+
+I have copied template code directly out of amavisd and have slithly modified
+it:
+
+# template derived from /usr/sbin/amavisd ~ line 33886
+$log_recip_templ = '
+[?%#D|#|Passed #
+[? [:ccat|major] |#
+OTHER|CLEAN|MTA-BLOCKED|OVERSIZED|BAD-HEADER-[:ccat|minor]|SPAMMY|SPAM|\
+UNCHECKED[?[:ccat|minor]||-ENCRYPTED|]|BANNED (%F)|INFECTED (%V)]#
+ {[:actions_performed]}#
+,[?%p|| %p][?%a||[?%l|| LOCAL] [:client_addr_port]][?%e|| \[%e\]] [:mail_addr_decode_octets|%s] -> [%D|[:mail_addr_decode_octets|%D]|,]#
+[? %q ||, quarantine: %q]#
+[? %Q ||, Queue-ID: %Q]#
+[? %m ||, Message-ID: [:mail_addr_decode_octets|%m]]#
+[? %r ||, Resent-Message-ID: [:mail_addr_decode_octets|%r]]#
+[? %i ||, mail_id: %i]#
+, Hits: [:SCORE]#
+, size: %z#
+[? [:partition_tag] ||, pt: [:partition_tag]]#
+[~[:remote_mta_smtp_response]|["^$"]||[", queued_as: "]]\
+[remote_mta_smtp_response|[~%x|["queued as ([0-9A-Za-z]+)$"]|["%1"]|["%0"]]|/]#
+#, Subject: [:dquote|[:mime2utf8|[:header_field_octets|Subject]|100|1]]#
+#, From: [:uquote|[:mail_addr_decode_octets|[:rfc2822_from]]]#
+[? %#T ||, Tests: \[[%T|,]\]]#
+[? [:dkim|sig_sd]    ||, dkim_sd=[:dkim|sig_sd]]#
+[? [:dkim|newsig_sd] ||, dkim_new=[:dkim|newsig_sd]]#
+, %y ms#
+]
+[?%#O|#|Blocked #
+[? [:ccat|major|blocking] |#
+OTHER|CLEAN|MTA-BLOCKED|OVERSIZED|BAD-HEADER-[:ccat|minor]|SPAMMY|SPAM|\
+UNCHECKED[?[:ccat|minor]||-ENCRYPTED|]|BANNED (%F)|INFECTED (%V)]#
+ {[:actions_performed]}#
+,[?%p|| %p][?%a||[?%l|| LOCAL] [:client_addr_port]][?%e|| \[%e\]] [:mail_addr_decode_octets|%s] -> [%O|[:mail_addr_decode_octets|%O]|,]#
+[? %q ||, quarantine: %q]#
+[? %Q ||, Queue-ID: %Q]#
+[? %m ||, Message-ID: [:mail_addr_decode_octets|%m]]#
+[? %r ||, Resent-Message-ID: [:mail_addr_decode_octets|%r]]#
+[? %i ||, mail_id: %i]#
+, Hits: [:SCORE]#
+, size: %z#
+[? [:partition_tag] ||, pt: [:partition_tag]]#
+#, Subject: [:dquote|[:mime2utf8|[:header_field_octets|Subject]|100|1]]#
+#, From: [:uquote|[:mail_addr_decode_octets|[:rfc2822_from]]]#
+[? %#T ||, Tests: \[[%T|,]\]]#
+[? [:dkim|sig_sd]    ||, dkim_sd=[:dkim|sig_sd]]#
+[? [:dkim|newsig_sd] ||, dkim_new=[:dkim|newsig_sd]]#
+, %y ms#
+]';
+
+This will produce log lines similar to that (wrapped for better reading):
+
+Jul 20 08:46:29 mx amavis[28805]: (28805-02) Passed CLEAN {AcceptedInternal},
+AM.PDP-SOCK LOCAL [...] [...]
+<...> -> <...>, Queue-ID: 3rvS9v2QF9zGpTb,
+Message-ID: <...>, mail_id:
+p_hA7G_XqiqP, Hits: 1.439, size:
+ 1631, Tests:
+ [BAYES_50=0.8,DCC_CHECK=1.1,DIGEST_MULTIPLE=0.293,PYZOR_CHECK=1.392,RCVD_IN_SBL=0.141,RP_MATCHES_RCVD=-1.287,DSPAM.Innocent=-1.000],
+ 2452 ms
+
+
+Requirements for rspamd:
+------------------------
+
+I personally like to have mail related logging at one place and not devided into
+several different files. For that I have told rspamd to log into syslog by
+override statement:
+
+rspamd.conf.override:
+
+logging {
+    type = "syslog";
+    facility = "mail";
+    level = "info";
+    .include "$CONFDIR/logging.inc"
+}
+
+This will produce log lines similar like this (wrapped for better reading)::
+
+Jul 20 08:50:43 mx rspamd[12384]: <5c3ffd>; task; rspamd_task_write_log: id:
+<...>, qid: <3rvSGm6s5gzGpVW>, ip:
+..., from: <...>,
+(default: T (reject): [22.79/15.00]
+[DBL_SPAM,MIME_GOOD,URIBL_BLACK,RBL_SPAMHAUS_SBL,FORGED_SENDER,RBL_SPAMHAUS_CSS,FORGED_MUA_THUNDERBIRD_MSGID_UNKNOWN,BAYES_SPAM]),
+len: 2045, time: 15.999ms real, 7.253ms virtual, dns req: 30
+
+
+Notes:
+------
+
+For examples how the reports look like, please see the provided examples.
+
+Have fun...
