@@ -15,24 +15,19 @@ SORT_SCORE = 1      # The score of a SA rule
 REQ_MIN_QTY = 2
 
 # Sort table
-SORT_KEY = SORT_SCORE
-
-BAR_LEN = 78
+SORT_KEY = SORT_QTY
 
 # Search pattern for mail.log
-PATTERN = ("^[a-zA-Z]{3} [0-9: ]{11} [a-zA-Z0-9]+ rspamd\[[0-9]{1,5}\]: "
-           ".+ task; rspamd_task_write_log: id: <.+>, "
+PATTERN = (".+ task; rspamd_task_write_log: id: <.+>, "
            "qid: <[a-zA-Z0-9]+>, ip: .+, from: <.+>, \("
            "default:.+ \(.+\): \[.+/.+\] \[(.+)\]"
            "\), .+$")
 
 rules = dict()
 
-
 def collect_info(record):
-    for rule, ruledef in record.items():
+    for rule, ruledef in record.iteritems():
         rules[rule] = ruledef["weight"]
-
 
 def main():
     table = dict()
@@ -44,7 +39,7 @@ def main():
     prog = re.compile(PATTERN)
 
     for group in iter(config):
-        for rawsym in group.values():
+        for rawsym in group.itervalues():
             sym = rawsym["symbol"]
             if isinstance(sym, list):
                 for subsym in iter(sym):
@@ -52,6 +47,7 @@ def main():
             if isinstance(sym, dict):
                 collect_info(sym)
 
+    res_from_log = False
     with open(sys.argv[1]) as f:
         while True:
             try:
@@ -64,13 +60,19 @@ def main():
             if result is not None:
                 cur = result.group(1).split(",")
                 for check in cur:
+                    if "(" in check:
+                        value = float(check.split("(")[1].split(")")[0])
+                        res_from_log = True
                     if check in table:
                         old = table[check]
                         old['cnt'] += 1
                         table[check] = old
                     else:
                         try:
-                            new = dict(cnt=1, score=rules[check])
+                            if res_from_log:
+                                new = dict(cnt=1, score=value)
+                            else:
+                                new = dict(cnt=1, score=rules[check])
                             table[check] = new
                         except KeyError:
                             pass
@@ -80,7 +82,7 @@ def main():
             continue
         records.append([v['cnt'], v['score'], k])
         table_sorted = sorted(records,
-                              key=lambda r: r[SORT_KEY],
+                              key=lambda x: x[SORT_KEY],
                               reverse=True)
 
     for test in table_sorted:
@@ -94,10 +96,13 @@ def main():
 
     print("Ham scores:")
     print("%\tQuantity\tScore\t\tTest")
-    print("-" * BAR_LEN)
+    print("-" * 79)
     for test in table_sorted:
         try:
             if float(test[1]) < 0.0:
+                if res_from_log:
+                    tmpname = test[2].split("(")[0]
+                    test[2] = tmpname
                 print(("%.2f%%\t%s\t\t%s\t\t%s"
                       % ((100.0 * test[0] / total_neg),
                          test[0], test[1], test[2])))
@@ -106,16 +111,18 @@ def main():
 
     print("\nSpam scores:")
     print("%\tQuantity\tScore\t\tTest")
-    print("-" * BAR_LEN)
+    print("-" * 79)
     for test in table_sorted:
         try:
             if float(test[1]) >= 0.0:
+                if res_from_log:
+                    tmpname = test[2].split("(")[0]
+                    test[2] = tmpname
                 print(("%.2f%%\t%s\t\t%s\t\t%s"
                       % ((100.0 * test[0] / total_pos),
                          test[0], test[1], test[2])))
         except ValueError:
             print("ValueError: %s" % test, file=sys.stderr)
-
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
@@ -129,3 +136,4 @@ if __name__ == "__main__":
     main()
 
     sys.exit(os.EX_OK)
+
