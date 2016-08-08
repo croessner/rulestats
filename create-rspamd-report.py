@@ -20,7 +20,7 @@ SORT_KEY = SORT_QTY
 # Search pattern for mail.log
 PATTERN = (".+ task; rspamd_task_write_log: id: <.+>, "
            "qid: <[a-zA-Z0-9]+>, ip: .+, from: <.+>, \("
-           "default:.+ \(.+\): \[.+/.+\] \[(.+)\]"
+           "default:.+ \((.+)\): \[.+/.+\] \[(.+)\]"
            "\), .+$")
 
 rules = dict()
@@ -34,6 +34,12 @@ def main():
     table_sorted = list()
     records = list()
     total_pos = total_neg = 0
+
+    normal = 0
+    add_header = 0
+    greylist = 0
+    reject = 0
+    total_msgs = 0
 
     config = json.load(sys.stdin)["metric"]["group"]
     prog = re.compile(PATTERN)
@@ -58,7 +64,19 @@ def main():
                 break
             result = prog.match(line)
             if result is not None:
-                cur = result.group(1).split(",")
+                total_msgs += 1
+
+                action = result.group(1)
+                if action == "no action":
+                    normal += 1
+                elif action == "add header":
+                    add_header += 1
+                elif action == "greylist":
+                    greylist += 1
+                elif action == "reject":
+                    reject += 1
+
+                cur = result.group(2).split(",")
                 for check in cur:
                     if "(" in check:
                         value = float(check.split("(")[1].split(")")[0])
@@ -94,7 +112,10 @@ def main():
         except ValueError:
             print("ValueError: %s" % test, file=sys.stderr)
 
-    print("Ham scores:")
+    print("Scan statistics:")
+    print("\nTotal: {}\nAdd header: {}\nGreylist: {}\nReject: {}\nNo action: {}"
+          .format(total_msgs, add_header, greylist, reject, normal))
+    print("\nHam scores:")
     print("%\tQuantity\tScore\t\tTest")
     print("-" * 79)
     for test in table_sorted:
