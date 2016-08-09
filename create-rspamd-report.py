@@ -113,11 +113,26 @@ def main():
             print("ValueError: %s" % test, file=sys.stderr)
 
     print("Scan statistics:")
-    print("\nTotal: {}\nAdd header: {}\nGreylist: {}\nReject: {}\nNo action: {}"
-          .format(total_msgs, add_header, greylist, reject, normal))
+
+    print("\nTotal messages scanned:\t{}\t\t100%".format(total_msgs))
+    print("-" * 78)
+    print("No action:\t\t{}\t\t{:.2f}%"
+          "\nGreylist:\t\t{}\t\t{:.2f}%"
+          "\nAdd header:\t\t{}\t\t{:.2f}%"
+          "\nReject:\t\t\t{}\t\t{:.2f}%"
+          .format(
+            normal, 
+            100.0 * normal / total_msgs if normal > 0 else 0.0, 
+            greylist, 
+            100.0 * greylist / total_msgs if greylist > 0 else 0.0,
+            add_header, 
+            100.0 * add_header / total_msgs if add_header > 0 else 0.0,
+            reject, 
+            100.0 * reject / total_msgs if reject > 0 else 0.0))
+
     print("\nHam scores:")
     print("%\tQuantity\tScore\t\tTest")
-    print("-" * 79)
+    print("-" * 78)
     for test in table_sorted:
         try:
             if float(test[1]) < 0.0:
@@ -132,7 +147,7 @@ def main():
 
     print("\nSpam scores:")
     print("%\tQuantity\tScore\t\tTest")
-    print("-" * 79)
+    print("-" * 78)
     for test in table_sorted:
         try:
             if float(test[1]) >= 0.0:
