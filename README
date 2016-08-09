@@ -50,9 +50,33 @@ My logrotate script looks something like this:
         endscript
 }
 
+This example combines statistics for spamassassin and rspamd, if both are logged
+to syslog.
+
 This usage guarentees that you will get a full 24 hour report. I have placed the
 two scripts under /usr/local/sbin. If you prefer another place, you must adpot
-the paths in the logrotate snippet.
+the paths in the logrotate snippet. Note: If you use a separate log file for
+rspamd, it might look like this:
+
+/var/log/rspamd/rspamd.log{
+       daily
+       rotate 4
+       delaycompress
+       compress
+       notifempty
+       missingok
+       postrotate
+          DATE=$(date +"%Y%m%d")
+          /usr/bin/rspamadm configdump -j | \
+                /usr/local/sbin/create-rspamd-report.py \
+                        /var/log/rspamd/rspamd.log-${DATE} | \
+                mail -s "Report: rspamd" root
+          test -r /run/rspamd/rspamd.pid && kill -USR1 $(cat /run/rspamd/rspamd.pid) &>/dev/null
+       endscript
+}
+
+As of writing this document, HUP is broken in rspamd. You must call USR1 for log
+rotation!
 
 
 General requirements:
@@ -130,6 +154,8 @@ p_hA7G_XqiqP, Hits: 1.439, size:
 Requirements for rspamd:
 ------------------------
 
+Only if you want to have rspamd log to syslog, follow these extra steps!
+
 I personally like to have mail related logging at one place and not devided into
 several different files. For that I have told rspamd to log into syslog by
 override statement:
@@ -151,6 +177,10 @@ Jul 20 08:50:43 mx rspamd[12384]: <5c3ffd>; task; rspamd_task_write_log: id:
 (default: T (reject): [22.79/15.00]
 [DBL_SPAM,MIME_GOOD,URIBL_BLACK,RBL_SPAMHAUS_SBL,FORGED_SENDER,RBL_SPAMHAUS_CSS,FORGED_MUA_THUNDERBIRD_MSGID_UNKNOWN,BAYES_SPAM]),
 len: 2045, time: 15.999ms real, 7.253ms virtual, dns req: 30
+
+If you prefer not to let rspamd log to syslog and you want to stay with the
+default rspamd.log file, you need to call the stats script in another logrotate
+script similar to this:
 
 
 Notes:
