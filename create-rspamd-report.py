@@ -39,6 +39,8 @@ def main():
     add_header = 0
     greylist = 0
     reject = 0
+    soft_reject = 0
+    subject = 0
     total_msgs = 0
 
     config = json.load(sys.stdin)["metric"]["group"]
@@ -73,6 +75,10 @@ def main():
                     add_header += 1
                 elif action == "greylist":
                     greylist += 1
+                elif action == "subject":
+                    subject += 1
+                elif action == "soft reject":
+                    soft_reject += 1
                 elif action == "reject":
                     reject += 1
 
@@ -119,6 +125,8 @@ def main():
     print("No action:\t\t{}\t\t{:.2f}%"
           "\nGreylist:\t\t{}\t\t{:.2f}%"
           "\nAdd header:\t\t{}\t\t{:.2f}%"
+          "\nSubject:\t\t{}\t\t{:.2f}%"
+          "\nSoft reject:\t\t{}\t\t{:.2f}%"
           "\nReject:\t\t\t{}\t\t{:.2f}%"
           .format(
             normal, 
@@ -127,6 +135,10 @@ def main():
             100.0 * greylist / total_msgs if greylist > 0 else 0.0,
             add_header, 
             100.0 * add_header / total_msgs if add_header > 0 else 0.0,
+            subject, 
+            100.0 * subject / total_msgs if subject > 0 else 0.0,
+            soft_reject, 
+            100.0 * soft_reject / total_msgs if soft_reject > 0 else 0.0,
             reject, 
             100.0 * reject / total_msgs if reject > 0 else 0.0))
 
