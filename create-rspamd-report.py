@@ -135,7 +135,7 @@ def main():
     print("-" * 78)
     for test in table_sorted:
         try:
-            if float(test[1]) < 0.0:
+            if float(test[1]) <= 0.0:
                 if res_from_log:
                     tmpname = test[2].split("(")[0]
                     test[2] = tmpname
@@ -150,7 +150,7 @@ def main():
     print("-" * 78)
     for test in table_sorted:
         try:
-            if float(test[1]) >= 0.0:
+            if float(test[1]) > 0.0:
                 if res_from_log:
                     tmpname = test[2].split("(")[0]
                     test[2] = tmpname
