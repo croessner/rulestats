@@ -48,7 +48,10 @@ def main():
 
     for group in iter(config):
         for rawsym in group.itervalues():
-            sym = rawsym["symbol"]
+	    try:
+            	sym = rawsym["symbol"]
+	    except KeyError:
+	    	continue
             if isinstance(sym, list):
                 for subsym in iter(sym):
                     collect_info(subsym)
