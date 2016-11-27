@@ -7,6 +7,9 @@ import json
 import sys
 import re
 
+# Works for rspamd version
+__version__ = "1.4.1"
+
 # Macros for SORT_KEY
 SORT_QTY = 0        # Absolute number of hits that a SA rule has gained
 SORT_SCORE = 1      # The score of a SA rule
@@ -23,11 +26,10 @@ PATTERN = (".+ task; rspamd_task_write_log: id: <.+>, "
            "default:.+ \((.+)\): \[.+/.+\] \[(.+)\]"
            "\), .+$")
 
-rules = dict()
+# Rule format: FOO_BAR(47.11){additional_info}
+RULE = "([0-9A-Z_]+)\((-?[0-9.]+)\)(\{[^\{]*\})"
 
-def collect_info(record):
-    for rule, ruledef in record.iteritems():
-        rules[rule] = ruledef["weight"]
+rules = dict()
 
 def main():
     table = dict()
@@ -43,20 +45,8 @@ def main():
     subject = 0
     total_msgs = 0
 
-    config = json.load(sys.stdin)["metric"]["group"]
     prog = re.compile(PATTERN)
-
-    for group in iter(config):
-        for rawsym in group.itervalues():
-	    try:
-            	sym = rawsym["symbol"]
-	    except KeyError:
-	    	continue
-            if isinstance(sym, list):
-                for subsym in iter(sym):
-                    collect_info(subsym)
-            if isinstance(sym, dict):
-                collect_info(sym)
+    rule_prog = re.compile(RULE)
 
     res_from_log = False
     with open(sys.argv[1]) as f:
@@ -85,24 +75,17 @@ def main():
                 elif action == "reject":
                     reject += 1
 
-                cur = result.group(2).split(",")
-                for check in cur:
-                    if "(" in check:
-                        value = float(check.split("(")[1].split(")")[0])
-                        res_from_log = True
-                    if check in table:
-                        old = table[check]
+                for cur in iter(rule_prog.findall(result.group(2))):
+                    rule_name = cur[0]
+                    rule_score = float(cur[1])
+                    rule_extra = cur[2]  # Currently unused
+                    if rule_name in table:
+                        old = table[rule_name]
                         old['cnt'] += 1
-                        table[check] = old
+                        table[rule_name] = old
                     else:
-                        try:
-                            if res_from_log:
-                                new = dict(cnt=1, score=value)
-                            else:
-                                new = dict(cnt=1, score=rules[check])
-                            table[check] = new
-                        except KeyError:
-                            pass
+                        new = dict(cnt=1, score=rule_score)
+                        table[rule_name] = new
 
     for k, v in table.items():
         if v['cnt'] < REQ_MIN_QTY:
